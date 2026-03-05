@@ -1,7 +1,10 @@
- # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # calc.py
 #
 # Initial PLY parser for JSON data (movie objects from IMDB-style datasets).
+# ADAPTATION NOTES:
+#   This file started from PLY's calculator example and was rewritten for JSON.
+#   Search for "ADAPTED:" comments to see what changed from the original calc.
 # -----------------------------------------------------------------------------
 
 import json
@@ -17,6 +20,8 @@ tokens = (
     "NULL",
 )
 
+# ADAPTED: calculator literals ['=', '+', '-', '*', '/', '(', ')']
+# became JSON punctuation literals ['{', '}', '[', ']', ':', ','].
 # JSON punctuation literals
 literals = ["{", "}", "[", "]", ":", ","]
 
@@ -24,12 +29,15 @@ t_ignore = " \t\r"
 
 
 def t_STRING(t):
+    # ADAPTED: calculator used NAME token; JSON needs quoted STRING token.
     r'"([^"\\]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*"'
     t.value = json.loads(t.value)
     return t
 
 
 def t_NUMBER(t):
+    # ADAPTED: calculator only parsed integers (\d+).
+    # JSON NUMBER supports sign, decimals, and exponent.
     r"-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?"
     text = t.value
     if "." in text or "e" in text.lower():
@@ -40,18 +48,21 @@ def t_NUMBER(t):
 
 
 def t_TRUE(t):
+    # ADAPTED: JSON keyword literal.
     r"true"
     t.value = True
     return t
 
 
 def t_FALSE(t):
+    # ADAPTED: JSON keyword literal.
     r"false"
     t.value = False
     return t
 
 
 def t_NULL(t):
+    # ADAPTED: JSON keyword literal.
     r"null"
     t.value = None
     return t
@@ -70,6 +81,8 @@ def t_error(t):
 lexer = lex.lex()
 
 
+# ADAPTED: old start behavior was statement/expression calculator grammar.
+# New start symbol expects a JSON movie object.
 def p_movie(p):
     "movie : object"
     p[0] = p[1]
@@ -134,6 +147,7 @@ def p_elements_multi(p):
 
 
 def p_value(p):
+    # ADAPTED: replaces arithmetic expression grammar with JSON value grammar.
     """value : STRING
              | NUMBER
              | object
@@ -159,6 +173,8 @@ def p_error(p):
 parser = yacc.yacc(start="movie")
 
 if __name__ == "__main__":
+    # ADAPTED: old prompt was "calc >" and parsed arithmetic input.
+    # New prompt parses one JSON object per line and prints Python result.
     while True:
         try:
             s = input("json-movie > ")
