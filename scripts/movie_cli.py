@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -128,6 +129,8 @@ def _add_dataset_argument(parser: argparse.ArgumentParser) -> None:
         type=Path,
         help="Dataset path. Defaults to the best available processed dataset.",
     )
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     parse_movie_json(args.path.read_text(encoding="utf-8"))
     print(f"Valid movie file: {args.path}")
