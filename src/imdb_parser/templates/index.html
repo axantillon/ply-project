@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Movie Atlas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">PLY Movie Parser</p>
+          <h1>Movie Atlas</h1>
+          <p class="subtitle">Ask for a movie naturally. Add filters only if you need them.</p>
+        </div>
+        <div class="dataset-pill">
+          <span>Dataset</span>
+          <strong id="dataset-label">{{ dataset }}</strong>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <section class="main-column">
+          <article class="panel query-panel">
+            <form id="query-form" class="query-form">
+              <label class="query-input-wrap" for="semantic-query">
+                <textarea id="semantic-query" rows="3" placeholder="A dark sci-fi movie about artificial reality and machines"></textarea>
+              </label>
+
+              <div class="query-toolbar">
+                <button type="submit" class="action-button">Search</button>
+                <button id="toggle-filters" type="button" class="ghost-button" aria-expanded="false">
+                  Filters
+                </button>
+                <div class="toolbar-meta">
+                  <span id="results-mode" class="mode-chip">Auto</span>
+                  <span id="results-summary" class="summary-text">Enter a query to search the parsed dataset.</span>
+                </div>
+              </div>
+
+              <div id="filter-panel" class="filter-panel is-hidden">
+                <div class="field-row">
+                  <label>
+                    <span>Genre</span>
+                    <input id="find-genre" type="text" placeholder="Sci-Fi">
+                  </label>
+                  <label>
+                    <span>Type</span>
+                    <input id="find-title-type" type="text" placeholder="movie">
+                  </label>
+                </div>
+                <div class="field-row">
+                  <label>
+                    <span>Year From</span>
+                    <input id="find-year-from" type="number" placeholder="1990">
+                  </label>
+                  <label>
+                    <span>Year To</span>
+                    <input id="find-year-to" type="number" placeholder="2010">
+                  </label>
+                  <label>
+                    <span>Results</span>
+                    <input id="semantic-limit" type="number" min="1" max="20" value="8">
+                  </label>
+                </div>
+                <div class="field-row">
+                  <label>
+                    <span>Backend</span>
+                    <select id="semantic-backend">
+                      <option value="auto">Auto</option>
+                      <option value="tfidf">TF-IDF</option>
+                      <option value="gemini">Gemini</option>
+                    </select>
+                  </label>
+                  <label class="title-filter">
+                    <span>Title Contains</span>
+                    <input id="find-title" type="text" placeholder="Matrix">
+                  </label>
+                </div>
+              </div>
+            </form>
+          </article>
+
+          <article class="panel results-panel">
+            <div id="results-list" class="results-scroll"></div>
+          </article>
+        </section>
+
+        <aside class="side-column">
+          <article class="panel stats-panel">
+            <div class="section-head">
+              <h2>Dataset Snapshot</h2>
+            </div>
+            <div id="stats-grid" class="stats-grid"></div>
+          </article>
+
+          <article class="panel detail-panel">
+            <div class="section-head">
+              <h2>Selection</h2>
+            </div>
+            <div id="detail-card" class="detail-card detail-card-empty">
+              Search for something to inspect a parsed movie record.
+            </div>
+          </article>
+        </aside>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+  </html>

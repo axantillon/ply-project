@@ -1,0 +1,12 @@
+{
+  "tconst": "tt0133093",
+  "titleType": "movie",
+  "primaryTitle": "The Matrix",
+  "originalTitle": "The Matrix",
+  "isAdult": false,
+  "startYear": 1999,
+  "endYear": null,
+  "runtimeMinutes": 136,
+  "genres": ["Action", "Sci-Fi"],
+  "synopsis": "A hacker discovers reality is a simulation and joins a rebellion against the machines controlling humanity."
+}
