@@ -75,10 +75,18 @@ class TfidfSemanticIndex:
             return 0.0
         return numerator / (left_norm * right_norm)
 
-    def search(self, query: str, limit: int = 5) -> List[Tuple[Movie, float]]:
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        candidates: Optional[Iterable[Movie]] = None,
+    ) -> List[Tuple[Movie, float]]:
         query_vector = self._vectorize(tokenize(query))
+        candidate_ids = None if candidates is None else {movie.tconst for movie in candidates}
         scored: List[Tuple[Movie, float]] = []
         for movie, vector in zip(self.movies, self.doc_vectors):
+            if candidate_ids is not None and movie.tconst not in candidate_ids:
+                continue
             score = self._cosine_sparse(query_vector, vector)
             if score > 0:
                 scored.append((movie, score))
@@ -104,10 +112,18 @@ class GeminiEmbeddingSemanticIndex:
         self.cache = self._load_cache(cache_path)
         self.doc_vectors = self._build_document_vectors()
 
-    def search(self, query: str, limit: int = 5) -> List[Tuple[Movie, float]]:
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        candidates: Optional[Iterable[Movie]] = None,
+    ) -> List[Tuple[Movie, float]]:
         query_vector = self._embed_query(query)
+        candidate_ids = None if candidates is None else {movie.tconst for movie in candidates}
         scored: List[Tuple[Movie, float]] = []
         for movie, vector in zip(self.movies, self.doc_vectors):
+            if candidate_ids is not None and movie.tconst not in candidate_ids:
+                continue
             score = cosine_similarity(query_vector, vector)
             if score > 0:
                 scored.append((movie, score))

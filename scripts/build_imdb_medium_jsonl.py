@@ -23,7 +23,7 @@ def nullish(value: str):
     return None if value == "\\N" else value
 
 
-def build_jsonl(src_gz: Path, dst_jsonl: Path, limit: int) -> int:
+def build_jsonl(src_gz: Path, dst_jsonl: Path, limit: int | None) -> int:
     count = 0
     dst_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
@@ -55,7 +55,7 @@ def build_jsonl(src_gz: Path, dst_jsonl: Path, limit: int) -> int:
             f_out.write(json.dumps(obj, ensure_ascii=False) + "\n")
             count += 1
 
-            if count >= limit:
+            if limit is not None and count >= limit:
                 break
 
     return count
@@ -63,7 +63,11 @@ def build_jsonl(src_gz: Path, dst_jsonl: Path, limit: int) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=15000, help="Number of movie records to write")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Number of movie records to write. Omit to write every movie in title.basics.tsv.gz.",
+    )
     parser.add_argument(
         "--raw",
         type=Path,

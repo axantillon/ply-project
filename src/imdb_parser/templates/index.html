@@ -4,109 +4,116 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Movie Atlas</title>
+    <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    >
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <main class="app-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">PLY Movie Parser</p>
-          <h1>Movie Atlas</h1>
-          <p class="subtitle">Ask for a movie naturally. Add filters only if you need them.</p>
+    <main id="app-shell" class="app-shell">
+      <section class="composer-stage">
+        <form id="composer-form" class="composer-card">
+          <div class="brand-row">
+            <span class="brand-mark">Movie Atlas</span>
+            <span id="dataset-label" class="dataset-chip" title="{{ dataset }}">{{ dataset }}</span>
+          </div>
+
+          <label class="composer-label" for="semantic-query">Ask the movie dataset</label>
+          <textarea
+            id="semantic-query"
+            rows="4"
+            placeholder="Ask in natural language, for example: a silent drama about hardship and social struggle"
+          ></textarea>
+
+          <div class="toolbelt" aria-label="Search tools">
+            <button type="button" class="tool-button" data-tool="genre">Genre</button>
+            <button type="button" class="tool-button" data-tool="years">Years</button>
+            <button type="button" class="tool-button" data-tool="type">Type</button>
+            <button type="button" class="tool-button" data-tool="title">Title</button>
+            <button type="button" class="tool-button" data-tool="limit">Limit</button>
+          </div>
+
+          <div id="active-tools" class="active-tools"></div>
+
+          <section id="tool-drawer" class="tool-drawer is-hidden" aria-label="Tool tray">
+            <div class="tool-drawer-head">
+              <span class="tool-drawer-label">Tool tray</span>
+              <button id="close-tools" type="button" class="ghost-button compact-button">Close</button>
+            </div>
+
+            <div class="tool-grid">
+              <section class="tool-card" data-tool-panel="genre">
+                <label for="find-genre">Genre</label>
+                <input id="find-genre" type="text" placeholder="Drama">
+              </section>
+
+              <section class="tool-card" data-tool-panel="years">
+                <label for="find-year-from">Year Range</label>
+                <div class="inline-fields">
+                  <input id="find-year-from" type="number" placeholder="From">
+                  <input id="find-year-to" type="number" placeholder="To">
+                </div>
+              </section>
+
+              <section class="tool-card" data-tool-panel="type">
+                <label for="find-title-type">Title Type</label>
+                <input id="find-title-type" type="text" placeholder="movie">
+              </section>
+
+              <section class="tool-card" data-tool-panel="title">
+                <label for="find-title">Title Contains</label>
+                <input id="find-title" type="text" placeholder="Valjean">
+              </section>
+
+              <section class="tool-card" data-tool-panel="limit">
+                <label for="semantic-limit">Results</label>
+                <input id="semantic-limit" type="number" min="1" max="20" value="8">
+              </section>
+            </div>
+          </section>
+
+          <div class="composer-footer">
+            <span class="composer-tip">Enter sends. Shift+Enter adds a line.</span>
+            <div class="composer-actions">
+              <button id="clear-composer" type="button" class="ghost-button">Reset</button>
+              <button type="submit" class="action-button">Search</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section id="results-section" class="results-shell is-hidden" aria-live="polite">
+        <div class="results-header">
+          <span id="results-mode" class="mode-pill"></span>
+          <p id="results-summary" class="results-summary"></p>
         </div>
-        <div class="dataset-pill">
-          <span>Dataset</span>
-          <strong id="dataset-label">{{ dataset }}</strong>
-        </div>
-      </header>
 
-      <section class="workspace">
-        <section class="main-column">
-          <article class="panel query-panel">
-            <form id="query-form" class="query-form">
-              <label class="query-input-wrap" for="semantic-query">
-                <textarea id="semantic-query" rows="3" placeholder="A dark sci-fi movie about artificial reality and machines"></textarea>
-              </label>
-
-              <div class="query-toolbar">
-                <button type="submit" class="action-button">Search</button>
-                <button id="toggle-filters" type="button" class="ghost-button" aria-expanded="false">
-                  Filters
-                </button>
-                <div class="toolbar-meta">
-                  <span id="results-mode" class="mode-chip">Auto</span>
-                  <span id="results-summary" class="summary-text">Enter a query to search the parsed dataset.</span>
-                </div>
-              </div>
-
-              <div id="filter-panel" class="filter-panel is-hidden">
-                <div class="field-row">
-                  <label>
-                    <span>Genre</span>
-                    <input id="find-genre" type="text" placeholder="Sci-Fi">
-                  </label>
-                  <label>
-                    <span>Type</span>
-                    <input id="find-title-type" type="text" placeholder="movie">
-                  </label>
-                </div>
-                <div class="field-row">
-                  <label>
-                    <span>Year From</span>
-                    <input id="find-year-from" type="number" placeholder="1990">
-                  </label>
-                  <label>
-                    <span>Year To</span>
-                    <input id="find-year-to" type="number" placeholder="2010">
-                  </label>
-                  <label>
-                    <span>Results</span>
-                    <input id="semantic-limit" type="number" min="1" max="20" value="8">
-                  </label>
-                </div>
-                <div class="field-row">
-                  <label>
-                    <span>Backend</span>
-                    <select id="semantic-backend">
-                      <option value="auto">Auto</option>
-                      <option value="tfidf">TF-IDF</option>
-                      <option value="gemini">Gemini</option>
-                    </select>
-                  </label>
-                  <label class="title-filter">
-                    <span>Title Contains</span>
-                    <input id="find-title" type="text" placeholder="Matrix">
-                  </label>
-                </div>
-              </div>
-            </form>
-          </article>
-
-          <article class="panel results-panel">
-            <div id="results-list" class="results-scroll"></div>
-          </article>
-        </section>
-
-        <aside class="side-column">
-          <article class="panel stats-panel">
-            <div class="section-head">
-              <h2>Dataset Snapshot</h2>
-            </div>
-            <div id="stats-grid" class="stats-grid"></div>
-          </article>
-
-          <article class="panel detail-panel">
-            <div class="section-head">
-              <h2>Selection</h2>
-            </div>
-            <div id="detail-card" class="detail-card detail-card-empty">
-              Search for something to inspect a parsed movie record.
-            </div>
-          </article>
-        </aside>
+        <div id="results-list" class="results-list"></div>
       </section>
     </main>
 
+    <section id="detail-modal" class="detail-modal is-hidden" aria-hidden="true">
+      <div id="detail-modal-backdrop" class="detail-modal-backdrop"></div>
+      <div
+        class="detail-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detail-modal-title"
+      >
+        <div class="detail-modal-header">
+          <span class="detail-modal-label">Movie Record</span>
+          <button id="close-detail-modal" type="button" class="ghost-button compact-button">Close</button>
+        </div>
+        <div id="detail-card" class="detail-card detail-card-empty">
+          Select a result to inspect the parsed record.
+        </div>
+      </div>
+    </section>
+
     <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
-  </html>
+</html>

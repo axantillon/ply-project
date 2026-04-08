@@ -8,7 +8,7 @@ This project parses normalized movie JSON records with a PLY lexer/parser, store
 - `src/imdb_parser/models.py`: `Movie` dataclass and schema validation.
 - `src/imdb_parser/catalog.py`: load JSON and JSONL movie datasets into memory.
 - `src/imdb_parser/query.py`: deterministic movie search.
-- `src/imdb_parser/semantic_search.py`: TF-IDF and Gemini-backed semantic retrieval.
+- `src/imdb_parser/semantic_search.py`: TF-IDF-based semantic retrieval.
 - `scripts/build_imdb_medium_jsonl.py`: build a normalized JSONL dataset from IMDb `title.basics.tsv.gz`.
 - `scripts/enrich_with_tmdb.py`: enrich the JSONL dataset with TMDb synopses.
 - `scripts/movie_cli.py`: main CLI for validation, parsing, and querying.
@@ -112,22 +112,14 @@ Then open `http://127.0.0.1:8000`.
 
 The page includes:
 
-- natural-language search
+- natural-language search backed by TF-IDF
 - structured filtering
-- a movie detail panel
-- dataset statistics
+- a movie detail modal
 
 Run natural-language search with the local TF-IDF backend:
 
 ```bash
 python3 scripts/movie_cli.py search --dataset samples "dark sci-fi movie about simulated reality"
-```
-
-Run natural-language search with Gemini embeddings:
-
-```bash
-export GEMINI_API_KEY=your_key_here
-python3 scripts/movie_cli.py search --backend gemini --cache data/processed/gemini_embedding_cache.json --dataset data/processed/imdb_movies_small_enriched.jsonl "a dark sci-fi movie about artificial reality and machines"
 ```
 
 ## Validate Dataset

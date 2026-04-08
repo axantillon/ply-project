@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -8,9 +7,9 @@ from .catalog import MovieCatalog
 
 
 DEFAULT_DATASET_CANDIDATES = (
-    Path("data/processed/imdb_movies_small_enriched.jsonl"),
     Path("data/processed/imdb_movies_enriched.jsonl"),
     Path("data/processed/imdb_movies_medium.jsonl"),
+    Path("data/processed/imdb_movies_small_enriched.jsonl"),
 )
 
 
@@ -28,6 +27,6 @@ def load_catalog(path: Optional[Path]) -> MovieCatalog:
 
 
 def select_semantic_backend(requested_backend: str) -> str:
-    if requested_backend != "auto":
-        return requested_backend
-    return "gemini" if os.environ.get("GEMINI_API_KEY") else "tfidf"
+    if requested_backend == "auto":
+        return "tfidf"
+    return requested_backend

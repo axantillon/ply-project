@@ -55,15 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--limit", type=int, default=5)
     search_parser.add_argument(
         "--backend",
-        choices=("auto", "tfidf", "gemini"),
+        choices=("auto", "tfidf"),
         default="auto",
         help="Semantic search backend",
-    )
-    search_parser.add_argument("--cache", type=Path, help="Embedding cache file")
-    search_parser.add_argument(
-        "--output-dimensionality",
-        type=int,
-        help="Optional reduced embedding dimensionality for Gemini",
     )
     search_parser.add_argument("--json", action="store_true", help="Output results as JSON")
     search_parser.set_defaults(func=cmd_search)
@@ -114,9 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_dataset_argument(legacy_semantic)
     legacy_semantic.add_argument("query")
     legacy_semantic.add_argument("--limit", type=int, default=5)
-    legacy_semantic.add_argument("--backend", choices=("auto", "tfidf", "gemini"), default="auto")
-    legacy_semantic.add_argument("--cache", type=Path)
-    legacy_semantic.add_argument("--output-dimensionality", type=int)
+    legacy_semantic.add_argument("--backend", choices=("auto", "tfidf"), default="auto")
     legacy_semantic.add_argument("--json", action="store_true")
     legacy_semantic.set_defaults(func=cmd_search)
 
@@ -175,8 +167,6 @@ def cmd_search(args: argparse.Namespace) -> int:
         args.query,
         limit=args.limit,
         backend=backend,
-        cache_path=args.cache,
-        output_dimensionality=args.output_dimensionality,
     )
 
     if args.json:

@@ -3,3 +3,5 @@ __pycache__/
 parser.out
 parsetab.py
 .DS_Store
+data/raw/title.basics.tsv.gz
+data/processed/imdb_movies_medium.jsonl
