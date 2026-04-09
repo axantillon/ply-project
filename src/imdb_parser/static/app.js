@@ -2,6 +2,9 @@ const appShell = document.getElementById("app-shell");
 const datasetLabel = document.getElementById("dataset-label");
 const resultsSection = document.getElementById("results-section");
 const resultsList = document.getElementById("results-list");
+const startupStatus = document.getElementById("startup-status");
+const startupPill = document.getElementById("startup-pill");
+const startupMessage = document.getElementById("startup-message");
 const detailModal = document.getElementById("detail-modal");
 const detailModalBackdrop = document.getElementById("detail-modal-backdrop");
 const closeDetailModalButton = document.getElementById("close-detail-modal");
@@ -9,11 +12,13 @@ const detailCard = document.getElementById("detail-card");
 const resultsSummary = document.getElementById("results-summary");
 const resultsMode = document.getElementById("results-mode");
 const activeTools = document.getElementById("active-tools");
-const toolDrawer = document.getElementById("tool-drawer");
+const pagination = document.getElementById("pagination");
+const paginationPrev = document.getElementById("pagination-prev");
+const paginationNext = document.getElementById("pagination-next");
+const paginationStatus = document.getElementById("pagination-status");
 
 const composerForm = document.getElementById("composer-form");
 const clearComposerButton = document.getElementById("clear-composer");
-const closeToolsButton = document.getElementById("close-tools");
 
 const fields = {
   query: document.getElementById("semantic-query"),
@@ -22,53 +27,41 @@ const fields = {
   titleType: document.getElementById("find-title-type"),
   yearFrom: document.getElementById("find-year-from"),
   yearTo: document.getElementById("find-year-to"),
-  limit: document.getElementById("semantic-limit"),
 };
-
-const DEFAULT_BACKEND = "tfidf";
-const DEFAULT_LIMIT = "8";
 const hasDetailModal =
   Boolean(detailModal) &&
   Boolean(detailModalBackdrop) &&
   Boolean(closeDetailModalButton);
 
-const TOOL_CONFIG = {
-  genre: { button: '[data-tool="genre"]', panel: "genre", focus: fields.genre },
-  years: { button: '[data-tool="years"]', panel: "years", focus: fields.yearFrom },
-  type: { button: '[data-tool="type"]', panel: "type", focus: fields.titleType },
-  title: { button: '[data-tool="title"]', panel: "title", focus: fields.title },
-  limit: { button: '[data-tool="limit"]', panel: "limit", focus: fields.limit },
-};
-
 const state = {
-  activeTool: null,
   lastResults: new Map(),
+  loadingTimers: [],
+  currentQuery: "",
+  currentTools: null,
+  currentPage: 1,
+  currentMode: "structured",
+  datasetReady: false,
+  manualOverrides: false,
+  syncingControls: false,
 };
 
 datasetLabel.textContent = formatDatasetLabel(datasetLabel.textContent);
 resultsMode.textContent = "";
 resultsSummary.textContent = "";
 renderActiveTools();
-
-for (const [toolName, config] of Object.entries(TOOL_CONFIG)) {
-  const button = document.querySelector(config.button);
-  button.addEventListener("click", () => toggleToolDrawer(toolName));
-}
+pollStartupStatus();
 
 document.querySelectorAll(".tool-card input, .tool-card select").forEach((control) => {
-  control.addEventListener("input", renderActiveTools);
-  control.addEventListener("change", renderActiveTools);
-  control.addEventListener("focus", () => {
-    const panel = control.closest(".tool-card")?.dataset.toolPanel;
-    if (!panel) {
+  const markManualOverride = () => {
+    if (state.syncingControls) {
       return;
     }
+    state.manualOverrides = true;
+    renderActiveTools();
+  };
 
-    const toolName = Object.keys(TOOL_CONFIG).find((item) => TOOL_CONFIG[item].panel === panel);
-    if (toolName) {
-      openToolDrawer(toolName, false);
-    }
-  });
+  control.addEventListener("input", markManualOverride);
+  control.addEventListener("change", markManualOverride);
 });
 
 activeTools.addEventListener("click", (event) => {
@@ -78,6 +71,7 @@ activeTools.addEventListener("click", (event) => {
   }
 
   clearTool(clearButton.dataset.clearTool);
+  state.manualOverrides = true;
   renderActiveTools();
 });
 
@@ -91,7 +85,8 @@ resultsList.addEventListener("click", (event) => {
 });
 
 clearComposerButton.addEventListener("click", () => resetComposer(true));
-closeToolsButton.addEventListener("click", closeToolDrawer);
+paginationPrev.addEventListener("click", () => goToPage(state.currentPage - 1));
+paginationNext.addEventListener("click", () => goToPage(state.currentPage + 1));
 
 if (closeDetailModalButton) {
   closeDetailModalButton.addEventListener("click", closeDetailModal);
@@ -108,6 +103,12 @@ fields.query.addEventListener("keydown", (event) => {
   }
 });
 
+fields.query.addEventListener("input", () => {
+  if (fields.query.value.trim() !== state.currentQuery) {
+    state.manualOverrides = false;
+  }
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && hasDetailModal && !detailModal.classList.contains("is-hidden")) {
     closeDetailModal();
@@ -118,43 +119,70 @@ composerForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const query = fields.query.value.trim();
+  const isNewQuery = Boolean(query) && query !== state.currentQuery;
+  if (isNewQuery) {
+    fields.title.value = "";
+    state.manualOverrides = false;
+  }
   const tools = collectTools();
   if (!query && !hasStructuredScope(tools)) {
     fields.query.focus();
     return;
   }
+  if (!state.datasetReady) {
+    renderError("The dataset is still preparing. Wait until startup finishes, then search again.");
+    return;
+  }
 
-  closeToolDrawer();
+  state.currentQuery = query;
+  state.currentTools = tools;
+  state.currentPage = 1;
+  state.currentMode = query ? "interpreted" : "structured";
   showLoading(query, tools);
 
   try {
-    const payload = query ? await runSemanticQuery(query, tools) : await runStructuredQuery(tools);
+    const payload = query
+      ? await runInterpretedQuery(query, tools, state.currentPage)
+      : await runStructuredQuery(tools, state.currentPage);
+    clearLoadingState();
     datasetLabel.textContent = formatDatasetLabel(payload.dataset);
     renderResults(payload, query, tools);
   } catch (error) {
+    clearLoadingState();
     renderError(error.message);
   }
 });
 
-async function runSemanticQuery(query, tools) {
+async function runInterpretedQuery(query, tools, page) {
   const params = new URLSearchParams({
     q: query,
-    backend: tools.backend || DEFAULT_BACKEND,
-    limit: tools.limit || DEFAULT_LIMIT,
+    page: String(page),
   });
-  appendStructuredParams(params, tools);
+  if (state.manualOverrides) {
+    appendStructuredParams(params, tools, true);
+  }
   return fetchJson(`/api/search?${params.toString()}`);
 }
 
-async function runStructuredQuery(tools) {
+async function runStructuredQuery(tools, page) {
   const params = new URLSearchParams({
-    limit: tools.limit || DEFAULT_LIMIT,
+    page: String(page),
   });
-  appendStructuredParams(params, tools);
+  appendStructuredParams(params, tools, true);
   return fetchJson(`/api/find?${params.toString()}`);
 }
 
-function appendStructuredParams(params, tools) {
+function appendStructuredParams(params, tools, includeEmpty = false) {
+  if (includeEmpty) {
+    params.set("manual_filters", "1");
+    params.set("title", tools.title || "");
+    params.set("genre", tools.genre || "");
+    params.set("title_type", tools.title_type || "");
+    params.set("year_from", tools.year_from || "");
+    params.set("year_to", tools.year_to || "");
+    return;
+  }
+
   if (tools.title) params.set("title", tools.title);
   if (tools.genre) params.set("genre", tools.genre);
   if (tools.title_type) params.set("title_type", tools.title_type);
@@ -169,8 +197,6 @@ function collectTools() {
     title_type: fields.titleType.value.trim(),
     year_from: fields.yearFrom.value.trim(),
     year_to: fields.yearTo.value.trim(),
-    backend: DEFAULT_BACKEND,
-    limit: fields.limit.value.trim() || DEFAULT_LIMIT,
   };
 }
 
@@ -186,18 +212,26 @@ function hasStructuredScope(tools) {
 
 function renderResults(payload, query, tools) {
   const semantic = Boolean(query);
-  const items = semantic
-    ? payload.results.map(({ movie, score }) => ({ movie, score }))
-    : payload.results.map((movie) => ({ movie, score: null }));
+  const normalized = normalizePayload(payload);
+  const items = normalized.results.map((movie) => ({
+    movie,
+    score: movie.matchScore ?? null,
+  }));
 
   state.lastResults = new Map(items.map((item) => [item.movie.tconst, item]));
 
   appShell.classList.add("has-results");
   resultsSection.classList.remove("is-hidden");
-  resultsMode.textContent = semantic ? `Semantic / ${formatBackend(payload.backend)}` : "Structured";
+  resultsMode.textContent = semantic ? "Interpreted Search" : "Structured";
   resultsSummary.textContent = semantic
-    ? buildSemanticSummary(query, tools, payload)
+    ? buildInterpretedSummary(query, normalized)
     : buildStructuredSummary(tools, items.length);
+  syncFilterControls(normalized.effectiveFilters || null, semantic);
+  if (semantic) {
+    state.manualOverrides = false;
+  }
+  state.currentTools = collectTools();
+  renderPagination(normalized);
 
   resultsList.innerHTML = items.length
     ? items
@@ -213,16 +247,13 @@ function renderResults(payload, query, tools) {
 function renderResultCard(movie, score, index) {
   const title = movie.displayTitle || movie.primaryTitle || movie.tconst;
   const year = movie.displayYear ?? "Unknown";
-  const synopsis = truncate(movie.synopsis || "No synopsis available for this record.", 180);
 
   return `
     <button type="button" class="result-card" data-movie-id="${escapeHtml(movie.tconst)}">
       <div class="result-topline">
         <div class="result-title">${index + 1}. ${escapeHtml(title)} (${escapeHtml(year)})</div>
-        ${score === null ? "" : `<span class="result-score">${escapeHtml(formatScore(score))}</span>`}
       </div>
       <p class="result-meta">${escapeHtml(movie.tconst)} | ${escapeHtml(movie.genreText || "n/a")}</p>
-      <p class="result-meta">${escapeHtml(synopsis)}</p>
     </button>
   `;
 }
@@ -263,7 +294,6 @@ function renderMovieDetail(movie, score) {
       endYear: movie.endYear,
       runtimeMinutes: movie.runtimeMinutes,
       genres: movie.genres,
-      synopsis: movie.synopsis,
     },
     null,
     2
@@ -281,12 +311,7 @@ function renderMovieDetail(movie, score) {
         <span class="detail-chip">runtime: ${escapeHtml(movie.runtimeMinutes ? `${movie.runtimeMinutes} min` : "unknown")}</span>
         <span class="detail-chip">genres: ${escapeHtml(movie.genreText || "n/a")}</span>
         <span class="detail-chip">adult: ${escapeHtml(formatAdult(movie.isAdult))}</span>
-        ${score === null ? "" : `<span class="detail-chip">score: ${escapeHtml(formatScore(score))}</span>`}
       </div>
-    </div>
-    <div class="detail-copy">
-      <span class="detail-section-label">Synopsis</span>
-      <p>${escapeHtml(movie.synopsis || "No synopsis available for this record yet.")}</p>
     </div>
     <div class="detail-json-wrap">
       <span class="detail-section-label">Parsed object</span>
@@ -309,24 +334,136 @@ function renderEmptyDetail() {
 }
 
 function renderError(message) {
+  clearLoadingState();
   appShell.classList.add("has-results");
   resultsSection.classList.remove("is-hidden");
   resultsMode.textContent = "Error";
   resultsSummary.textContent = message;
   resultsList.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   renderEmptyDetail();
+  renderPagination(null);
   resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function renderStartupState(payload) {
+  if (!startupStatus) {
+    return;
+  }
+
+  if (payload.status === "ready") {
+    state.datasetReady = true;
+    startupStatus.classList.add("is-hidden");
+    setFormDisabled(false);
+    return;
+  }
+
+  state.datasetReady = false;
+  startupStatus.classList.remove("is-hidden");
+  setFormDisabled(true);
+
+  if (payload.status === "error") {
+    startupPill.textContent = "Dataset Error";
+    startupMessage.textContent = payload.error || "The dataset failed to load.";
+    return;
+  }
+
+  startupPill.textContent = "Preparing Dataset";
+  startupMessage.textContent = `Loading ${formatDatasetLabel(payload.dataset)}. Search will unlock automatically when the dataset is ready.`;
+}
+
+async function pollStartupStatus() {
+  try {
+    const payload = await fetchJson("/api/status");
+    datasetLabel.textContent = formatDatasetLabel(payload.dataset);
+    renderStartupState(payload);
+    if (!state.datasetReady) {
+      window.setTimeout(pollStartupStatus, 1000);
+    }
+  } catch (error) {
+    startupStatus.classList.remove("is-hidden");
+    startupPill.textContent = "Waiting for Server";
+    startupMessage.textContent = "The web app is still starting. Retrying shortly.";
+    state.datasetReady = false;
+    window.setTimeout(pollStartupStatus, 1000);
+  }
+}
+
 function showLoading(query, tools) {
+  clearLoadingState();
   appShell.classList.add("has-results");
+  composerForm.classList.add("is-loading");
+  setFormDisabled(true);
   resultsSection.classList.remove("is-hidden");
-  resultsMode.textContent = query ? "Searching" : "Filtering";
+  resultsMode.textContent = query ? "Interpreting Query" : "Structured";
   resultsSummary.textContent = query
     ? `Searching for "${query}"...`
     : buildStructuredSummary(tools, 0);
-  resultsList.innerHTML = `<div class="empty-state">Working...</div>`;
+  resultsList.innerHTML = `
+    <div class="loading-card" aria-live="polite">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <div class="loading-copy">
+        <strong id="loading-headline">${escapeHtml(query ? "Searching the movie dataset" : "Filtering movie records")}</strong>
+        <p id="loading-message">${escapeHtml(buildLoadingMessage(query, 0))}</p>
+      </div>
+    </div>
+  `;
+  scheduleLoadingUpdates(query);
   renderEmptyDetail();
+  renderPagination(null);
+}
+
+function clearLoadingState() {
+  composerForm.classList.remove("is-loading");
+  setFormDisabled(false);
+  state.loadingTimers.forEach((timer) => window.clearTimeout(timer));
+  state.loadingTimers = [];
+}
+
+function scheduleLoadingUpdates(query) {
+  const messageNode = document.getElementById("loading-message");
+  if (!messageNode) {
+    return;
+  }
+
+  [2000, 5000, 9000].forEach((delay, index) => {
+    const timer = window.setTimeout(() => {
+      const currentNode = document.getElementById("loading-message");
+      if (!currentNode) {
+        return;
+      }
+      currentNode.textContent = buildLoadingMessage(query, index + 1);
+    }, delay);
+    state.loadingTimers.push(timer);
+  });
+}
+
+function buildLoadingMessage(query, phase) {
+  const interpretedLoadingMessages = [
+    "Interpreting your prompt into structured filters and query terms.",
+    "Scanning the IMDb metadata with the interpreted constraints.",
+    "Ranking the strongest matches from the filtered result set.",
+    "Still working through the full dataset.",
+  ];
+  const loadingMessages = query
+    ? interpretedLoadingMessages
+    : [
+        "Applying the active metadata filters.",
+        "Sorting matching records.",
+        "Still working through the filtered results.",
+        "Almost there.",
+      ];
+  return loadingMessages[Math.min(phase, loadingMessages.length - 1)];
+}
+
+function setFormDisabled(disabled) {
+  composerForm
+    .querySelectorAll("button, input, select, textarea")
+    .forEach((element) => {
+      if (element.id === "close-detail-modal") {
+        return;
+      }
+      element.disabled = disabled;
+    });
 }
 
 function openDetailModal() {
@@ -361,7 +498,6 @@ function renderActiveTools() {
   }
   if (tools.title_type) badges.push({ key: "type", label: `Type: ${tools.title_type}` });
   if (tools.title) badges.push({ key: "title", label: `Title: ${tools.title}` });
-  if (tools.limit !== DEFAULT_LIMIT) badges.push({ key: "limit", label: `Limit: ${tools.limit}` });
 
   activeTools.innerHTML = badges
     .map(
@@ -390,9 +526,6 @@ function clearTool(toolName) {
     case "title":
       fields.title.value = "";
       break;
-    case "limit":
-      fields.limit.value = DEFAULT_LIMIT;
-      break;
     default:
       break;
   }
@@ -405,65 +538,112 @@ function resetComposer(focusQuery) {
   fields.titleType.value = "";
   fields.yearFrom.value = "";
   fields.yearTo.value = "";
-  fields.limit.value = DEFAULT_LIMIT;
   renderActiveTools();
-  closeToolDrawer();
+  renderPagination(null);
+  resultsSection.classList.add("is-hidden");
+  appShell.classList.remove("has-results");
+  state.manualOverrides = false;
 
   if (focusQuery) {
     fields.query.focus();
   }
 }
 
-function toggleToolDrawer(toolName) {
-  if (!toolDrawer.classList.contains("is-hidden") && state.activeTool === toolName) {
-    closeToolDrawer();
+function buildInterpretedSummary(query, payload) {
+  return `${payload.totalResults} matches, page ${payload.page} of ${payload.totalPages}.`;
+}
+
+function normalizePayload(payload) {
+  const normalizedResults = (payload.results || []).map((item) => {
+    if (item && item.movie) {
+      const movie = item.movie;
+      if (item.score !== undefined && movie.matchScore === undefined) {
+        movie.matchScore = item.score;
+      }
+      return movie;
+    }
+    return item;
+  });
+
+  const interpretedQuery = payload.interpretedQuery || {
+    genres: payload.appliedFilters?.genre ? [payload.appliedFilters.genre] : [],
+    titleType: payload.appliedFilters?.titleType || null,
+    yearFrom: payload.appliedFilters?.yearFrom ?? null,
+    yearTo: payload.appliedFilters?.yearTo ?? null,
+    keywords: [],
+  };
+
+  return {
+    ...payload,
+    results: normalizedResults,
+    interpretedQuery,
+    effectiveFilters: payload.effectiveFilters || null,
+    page: payload.page ?? 1,
+    totalPages: payload.totalPages ?? 1,
+    totalResults: payload.totalResults ?? normalizedResults.length,
+  };
+}
+
+function syncFilterControls(effectiveFilters, shouldSync) {
+  if (!shouldSync || !effectiveFilters) {
+    return;
+  }
+  state.syncingControls = true;
+  fields.genre.value = effectiveFilters.genre || "";
+  fields.titleType.value = effectiveFilters.titleType || "";
+  fields.yearFrom.value = effectiveFilters.yearFrom ?? "";
+  fields.yearTo.value = effectiveFilters.yearTo ?? "";
+  fields.title.value = effectiveFilters.title || "";
+  state.syncingControls = false;
+  renderActiveTools();
+}
+
+function renderPagination(payload) {
+  if (!payload || (payload.totalPages ?? 1) <= 1) {
+    pagination.classList.add("is-hidden");
+    paginationStatus.textContent = "";
+    paginationPrev.disabled = true;
+    paginationNext.disabled = true;
     return;
   }
 
-  openToolDrawer(toolName, true);
+  pagination.classList.remove("is-hidden");
+  paginationStatus.textContent = `Page ${payload.page} of ${payload.totalPages}`;
+  paginationPrev.disabled = payload.page <= 1;
+  paginationNext.disabled = payload.page >= payload.totalPages;
 }
 
-function openToolDrawer(toolName, focusField) {
-  state.activeTool = toolName;
-  toolDrawer.classList.remove("is-hidden");
-  syncToolUI();
-
-  if (focusField) {
-    TOOL_CONFIG[toolName].focus.focus();
+async function goToPage(page) {
+  if (!state.currentTools || page < 1) {
+    return;
   }
-}
 
-function closeToolDrawer() {
-  state.activeTool = null;
-  toolDrawer.classList.add("is-hidden");
-  syncToolUI();
-}
+  state.currentPage = page;
+  const query = state.currentQuery;
+  const tools = collectTools();
+  state.currentTools = tools;
+  showLoading(query, tools);
 
-function syncToolUI() {
-  for (const [toolName, config] of Object.entries(TOOL_CONFIG)) {
-    const button = document.querySelector(config.button);
-    const panel = document.querySelector(`[data-tool-panel="${config.panel}"]`);
-    const active = state.activeTool === toolName;
-    button.classList.toggle("is-active", active);
-    panel.classList.toggle("is-focused", active);
+  try {
+    const payload = query
+      ? await runInterpretedQuery(query, tools, page)
+      : await runStructuredQuery(tools, page);
+    clearLoadingState();
+    renderResults(payload, query, tools);
+  } catch (error) {
+    clearLoadingState();
+    renderError(error.message);
   }
-}
-
-function buildSemanticSummary(query, tools, payload) {
-  const scope = describeScope(tools);
-  if (!scope) {
-    return `${formatBackend(payload.backend)} returned ${payload.results.length} results for "${query}".`;
-  }
-  return `${formatBackend(payload.backend)} returned ${payload.results.length} results for "${query}" inside ${scope}.`;
 }
 
 function buildStructuredSummary(tools, count) {
   const scope = describeScope(tools);
   if (!scope) {
-    return `${count} structured matches.`;
+    return `${count} structured matches on this page.`;
   }
-  return `${count} structured matches inside ${scope}.`;
+  return `${count} structured matches on this page inside ${scope}.`;
 }
+
 
 function describeScope(tools) {
   const parts = [];
@@ -476,11 +656,6 @@ function describeScope(tools) {
     parts.push(`years ${from} to ${to}`);
   }
   return parts.join(", ");
-}
-
-function formatBackend(backend) {
-  if (backend === "tfidf") return "TF-IDF";
-  return "Auto";
 }
 
 function formatDatasetLabel(path) {

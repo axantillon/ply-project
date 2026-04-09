@@ -95,16 +95,3 @@ class Movie:
             "genres": self.genres,
             "synopsis": self.synopsis,
         }
-
-    def text_for_semantic_search(self) -> str:
-        genre_text = ", ".join(self.genres) if self.genres else "unknown genres"
-        synopsis = self.synopsis or ""
-        parts = [
-            self.primary_title,
-            self.original_title or "",
-            f"type {self.title_type}",
-            f"released {self.start_year}" if self.start_year is not None else "",
-            f"genres {genre_text}",
-            synopsis,
-        ]
-        return ". ".join(part.strip() for part in parts if part.strip())

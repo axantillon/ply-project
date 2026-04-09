@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
-"""CLI for validating, parsing, enriching, and querying movie records."""
+"""CLI for validating, parsing, building, and querying movie records."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from imdb_parser import parse_movie_json  # noqa: E402
-from imdb_parser.datasets import load_catalog, resolve_dataset, select_semantic_backend  # noqa: E402
+from imdb_parser.datasets import load_catalog, resolve_dataset  # noqa: E402
 from imdb_parser.models import Movie  # noqa: E402
-from imdb_parser.query import search_movies  # noqa: E402
-from imdb_parser.semantic_search import semantic_search  # noqa: E402
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from enrich_with_tmdb import enrich_dataset  # noqa: E402
+from imdb_parser.query import infer_search_constraints, rank_movies_by_query, search_movies  # noqa: E402
+from build_imdb_medium_jsonl import IMDB_BASICS_URL, build_jsonl, maybe_download  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,19 +44,20 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser = subparsers.add_parser(
         "search",
         aliases=["ask"],
-        help="Natural-language search over the movie dataset",
+        help="Interpret a natural-language prompt into structured movie search",
     )
     _add_dataset_argument(search_parser)
     search_parser.add_argument("query")
     search_parser.add_argument("--limit", type=int, default=5)
-    search_parser.add_argument(
-        "--backend",
-        choices=("auto", "tfidf"),
-        default="auto",
-        help="Semantic search backend",
-    )
     search_parser.add_argument("--json", action="store_true", help="Output results as JSON")
     search_parser.set_defaults(func=cmd_search)
+
+    explain_parser = subparsers.add_parser(
+        "explain-query",
+        help="Show how a natural-language query is interpreted into structured constraints",
+    )
+    explain_parser.add_argument("query")
+    explain_parser.set_defaults(func=cmd_explain_query)
 
     show_parser = subparsers.add_parser("show", help="Show one movie by IMDb ID")
     _add_dataset_argument(show_parser)
@@ -82,35 +79,27 @@ def build_parser() -> argparse.ArgumentParser:
     parse_parser.add_argument("--json", action="store_true", help="Output the parsed movie as JSON")
     parse_parser.set_defaults(func=cmd_parse)
 
-    enrich_parser = subparsers.add_parser("enrich", help="Enrich a JSONL dataset with TMDb synopses")
-    enrich_parser.add_argument(
-        "--src",
-        type=Path,
-        default=Path("data/processed/imdb_movies_medium.jsonl"),
+    build_parser_cmd = subparsers.add_parser(
+        "build-dataset",
+        help="Build a normalized movie dataset from IMDb title.basics",
     )
-    enrich_parser.add_argument(
+    build_parser_cmd.add_argument("--raw", type=Path, default=Path("data/raw/title.basics.tsv.gz"))
+    build_parser_cmd.add_argument(
+        "--download",
+        action="store_true",
+        help="Download title.basics.tsv.gz if missing",
+    )
+    build_parser_cmd.add_argument(
+        "--limit",
+        type=int,
+        help="Optional record limit. Omit to build the full dataset.",
+    )
+    build_parser_cmd.add_argument(
         "--out",
         type=Path,
-        default=Path("data/processed/imdb_movies_enriched.jsonl"),
+        default=Path("data/processed/imdb_movies_full.jsonl"),
     )
-    enrich_parser.add_argument(
-        "--cache",
-        type=Path,
-        default=Path("data/processed/tmdb_overview_cache.json"),
-    )
-    enrich_parser.add_argument("--delay-seconds", type=float, default=0.25)
-    enrich_parser.set_defaults(func=cmd_enrich)
-
-    legacy_semantic = subparsers.add_parser(
-        "semantic-search",
-        help=argparse.SUPPRESS,
-    )
-    _add_dataset_argument(legacy_semantic)
-    legacy_semantic.add_argument("query")
-    legacy_semantic.add_argument("--limit", type=int, default=5)
-    legacy_semantic.add_argument("--backend", choices=("auto", "tfidf"), default="auto")
-    legacy_semantic.add_argument("--json", action="store_true")
-    legacy_semantic.set_defaults(func=cmd_search)
+    build_parser_cmd.set_defaults(func=cmd_build_dataset)
 
     return parser
 
@@ -124,8 +113,21 @@ def _add_dataset_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
-    parse_movie_json(args.path.read_text(encoding="utf-8"))
-    print(f"Valid movie file: {args.path}")
+    raw_text = args.path.read_text(encoding="utf-8")
+    movie = parse_movie_json(raw_text)
+    genres = ", ".join(movie.genres) if movie.genres else "n/a"
+    year = movie.start_year if movie.start_year is not None else "unknown"
+    runtime = f"{movie.runtime_minutes} min" if movie.runtime_minutes is not None else "unknown"
+    print("Input preview:")
+    print(_preview_text(raw_text))
+    print("Validation passed")
+    print(f"File: {args.path}")
+    print(f"ID: {movie.tconst}")
+    print(f"Title: {movie.primary_title}")
+    print(f"Type: {movie.title_type}")
+    print(f"Year: {year}")
+    print(f"Genres: {genres}")
+    print(f"Runtime: {runtime}")
     return 0
 
 
@@ -160,26 +162,69 @@ def cmd_find(args: argparse.Namespace) -> int:
 
 def cmd_search(args: argparse.Namespace) -> int:
     dataset = resolve_dataset(args.dataset)
-    backend = select_semantic_backend(args.backend)
     catalog = load_catalog(dataset)
-    results = semantic_search(
-        list(catalog),
-        args.query,
+    inferred = infer_search_constraints(args.query)
+    movies = list(catalog)
+    scoped_movies = search_movies(
+        movies,
+        genre=", ".join(inferred["genres"]) if inferred["genres"] else None,
+        title_type=inferred["title_type"],
+        year_from=inferred["year_from"],
+        year_to=inferred["year_to"],
+    )
+    ranked_results = rank_movies_by_query(
+        scoped_movies,
+        genres=inferred["genres"],
+        title_type=inferred["title_type"],
+        year_from=inferred["year_from"],
+        year_to=inferred["year_to"],
+        keywords=inferred["keywords"],
         limit=args.limit,
-        backend=backend,
     )
 
     if args.json:
-        payload = [
-            {"score": score, "movie": movie.to_dict()}
-            for movie, score in results
-        ]
+        payload = {
+            "query": args.query,
+            "interpretedQuery": {
+                "genres": inferred["genres"],
+                "titleType": inferred["title_type"],
+                "yearFrom": inferred["year_from"],
+                "yearTo": inferred["year_to"],
+                "keywords": inferred["keywords"],
+            },
+            "results": [{"score": score, "movie": movie.to_dict()} for movie, score in ranked_results],
+        }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"Dataset: {dataset}")
-        print(f"Semantic backend: {backend}")
-        _print_ranked_movies((movie for movie, _ in results), scores=dict((movie.tconst, score) for movie, score in results))
+        _print_query_interpretation(inferred)
+        _print_ranked_movies(results_to_movies(ranked_results), scores={movie.tconst: score for movie, score in ranked_results})
     return 0
+
+
+def cmd_explain_query(args: argparse.Namespace) -> int:
+    inferred = infer_search_constraints(args.query)
+    genres = ", ".join(inferred["genres"]) if inferred["genres"] else "none"
+    title_type = inferred["title_type"] or "none"
+    if inferred["year_from"] is None and inferred["year_to"] is None:
+        year_range = "none"
+    elif inferred["year_from"] == inferred["year_to"]:
+        year_range = str(inferred["year_from"])
+    else:
+        year_range = f"{inferred['year_from']} to {inferred['year_to']}"
+    keywords = ", ".join(inferred["keywords"]) if inferred["keywords"] else "none"
+
+    print("Query interpretation")
+    print(f'Input: "{args.query}"')
+    print(f"Genres: {genres}")
+    print(f"Title type: {title_type}")
+    print(f"Year range: {year_range}")
+    print(f"Keywords: {keywords}")
+    return 0
+
+
+def results_to_movies(results):
+    return (movie for movie, _ in results)
 
 
 def cmd_show(args: argparse.Namespace) -> int:
@@ -203,12 +248,10 @@ def cmd_stats(args: argparse.Namespace) -> int:
     movies = list(catalog)
     years = [movie.start_year for movie in movies if movie.start_year is not None]
     genres = Counter(genre for movie in movies for genre in movie.genres)
-    with_synopsis = sum(1 for movie in movies if movie.synopsis)
-
     payload = {
         "dataset": str(dataset),
         "movieCount": len(movies),
-        "withSynopsisCount": with_synopsis,
+        "recordType": "IMDb movies",
         "yearRange": [min(years), max(years)] if years else None,
         "topGenres": genres.most_common(5),
     }
@@ -218,7 +261,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
     else:
         print(f"Dataset: {dataset}")
         print(f"Movies: {payload['movieCount']}")
-        print(f"With synopsis: {payload['withSynopsisCount']}")
+        print(f"Record type: {payload['recordType']}")
         if payload["yearRange"] is not None:
             print(f"Year range: {payload['yearRange'][0]} to {payload['yearRange'][1]}")
         if payload["topGenres"]:
@@ -228,19 +271,15 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_enrich(args: argparse.Namespace) -> int:
-    api_key = os.environ.get("TMDB_API_BEARER_TOKEN")
-    if not api_key:
-        raise RuntimeError("TMDB_API_BEARER_TOKEN must be set before running enrich")
+def cmd_build_dataset(args: argparse.Namespace) -> int:
+    if args.download:
+        maybe_download(IMDB_BASICS_URL, args.raw)
+    elif not args.raw.exists():
+        raise FileNotFoundError(f"Raw file not found: {args.raw}. Use --download.")
 
-    seen, enriched = enrich_dataset(
-        args.src,
-        args.out,
-        api_key=api_key,
-        cache_path=args.cache,
-        delay_seconds=args.delay_seconds,
-    )
-    print(f"Wrote {seen} records to {args.out}; added synopses for {enriched} of them")
+    count = build_jsonl(args.raw, args.out, args.limit)
+    label = "full dataset" if args.limit is None else f"{count} records"
+    print(f"Wrote {label} to {args.out}")
     return 0
 
 
@@ -269,9 +308,30 @@ def _print_movie_detail(movie: Movie) -> None:
     print(f"Type: {movie.title_type}")
     print(f"Genres: {genres}")
     print(f"Runtime: {runtime}")
-    if movie.synopsis:
-        print("Synopsis:")
-        print(movie.synopsis)
+
+
+def _preview_text(raw_text: str, limit: int = 220) -> str:
+    compact = " ".join(raw_text.split())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[: limit - 3]}..."
+
+
+def _print_query_interpretation(inferred: dict[str, object]) -> None:
+    genres = ", ".join(inferred["genres"]) if inferred["genres"] else "none"
+    title_type = inferred["title_type"] or "none"
+    if inferred["year_from"] is None and inferred["year_to"] is None:
+        year_range = "none"
+    elif inferred["year_from"] == inferred["year_to"]:
+        year_range = str(inferred["year_from"])
+    else:
+        year_range = f"{inferred['year_from']} to {inferred['year_to']}"
+    keywords = ", ".join(inferred["keywords"]) if inferred["keywords"] else "none"
+    print("Interpreted query:")
+    print(f"- Genres: {genres}")
+    print(f"- Title type: {title_type}")
+    print(f"- Year range: {year_range}")
+    print(f"- Keywords: {keywords}")
 
 
 def main() -> int:
@@ -280,6 +340,15 @@ def main() -> int:
     try:
         return args.func(args)
     except Exception as exc:  # pragma: no cover - CLI boundary
+        if getattr(args, "command", None) == "validate":
+            try:
+                raw_text = args.path.read_text(encoding="utf-8")
+                print("Input preview:", file=sys.stderr)
+                print(_preview_text(raw_text), file=sys.stderr)
+            except Exception:
+                pass
+            print("Validation failed", file=sys.stderr)
+            print(f"File: {args.path}", file=sys.stderr)
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

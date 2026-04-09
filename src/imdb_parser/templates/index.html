@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     >
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=styles_version) }}">
   </head>
   <body>
     <main id="app-shell" class="app-shell">
@@ -22,38 +22,42 @@
             <span id="dataset-label" class="dataset-chip" title="{{ dataset }}">{{ dataset }}</span>
           </div>
 
-          <label class="composer-label" for="semantic-query">Ask the movie dataset</label>
+          <label class="composer-label" for="semantic-query">Search the movie dataset</label>
           <textarea
             id="semantic-query"
             rows="4"
-            placeholder="Ask in natural language, for example: a silent drama about hardship and social struggle"
+            placeholder="Describe a movie or mix metadata, for example: dark sci-fi romance from the 1990s"
           ></textarea>
 
-          <div class="toolbelt" aria-label="Search tools">
-            <button type="button" class="tool-button" data-tool="genre">Genre</button>
-            <button type="button" class="tool-button" data-tool="years">Years</button>
-            <button type="button" class="tool-button" data-tool="type">Type</button>
-            <button type="button" class="tool-button" data-tool="title">Title</button>
-            <button type="button" class="tool-button" data-tool="limit">Limit</button>
-          </div>
+          <section id="startup-status" class="startup-status is-hidden" aria-live="polite">
+            <span id="startup-pill" class="mode-pill">Preparing Dataset</span>
+            <p id="startup-message" class="startup-message"></p>
+          </section>
 
-          <div id="active-tools" class="active-tools"></div>
-
-          <section id="tool-drawer" class="tool-drawer is-hidden" aria-label="Tool tray">
-            <div class="tool-drawer-head">
-              <span class="tool-drawer-label">Tool tray</span>
-              <button id="close-tools" type="button" class="ghost-button compact-button">Close</button>
+          <section class="mode-strip" aria-label="Search model">
+            <div class="mode-copy">
+              <span class="mode-strip-label">How search works</span>
+              <p class="mode-strip-hint">Write a natural-language prompt. The backend turns it into structured filters and query terms, then searches the IMDb metadata directly.</p>
             </div>
+          </section>
 
+          <section class="filter-strip" aria-label="Manual filters">
+            <div class="filter-strip-copy">
+              <span class="tool-drawer-label">Manual filters</span>
+            </div>
+            <div id="active-tools" class="active-tools"></div>
+          </section>
+
+          <section id="tool-drawer" class="tool-drawer" aria-label="Manual filters">
             <div class="tool-grid">
               <section class="tool-card" data-tool-panel="genre">
                 <label for="find-genre">Genre</label>
-                <input id="find-genre" type="text" placeholder="Drama">
+                <input id="find-genre" type="text" placeholder="Sci-Fi, Romance">
               </section>
 
               <section class="tool-card" data-tool-panel="years">
-                <label for="find-year-from">Year Range</label>
-                <div class="inline-fields">
+                <label>Years</label>
+                <div class="year-pair">
                   <input id="find-year-from" type="number" placeholder="From">
                   <input id="find-year-to" type="number" placeholder="To">
                 </div>
@@ -61,17 +65,20 @@
 
               <section class="tool-card" data-tool-panel="type">
                 <label for="find-title-type">Title Type</label>
-                <input id="find-title-type" type="text" placeholder="movie">
+                <select id="find-title-type">
+                  <option value="">Any</option>
+                  <option value="movie">Movie</option>
+                  <option value="short">Short</option>
+                  <option value="tvSeries">TV Series</option>
+                  <option value="tvMovie">TV Movie</option>
+                  <option value="tvSpecial">TV Special</option>
+                  <option value="videoGame">Video Game</option>
+                </select>
               </section>
 
               <section class="tool-card" data-tool-panel="title">
                 <label for="find-title">Title Contains</label>
                 <input id="find-title" type="text" placeholder="Valjean">
-              </section>
-
-              <section class="tool-card" data-tool-panel="limit">
-                <label for="semantic-limit">Results</label>
-                <input id="semantic-limit" type="number" min="1" max="20" value="8">
               </section>
             </div>
           </section>
@@ -89,10 +96,17 @@
       <section id="results-section" class="results-shell is-hidden" aria-live="polite">
         <div class="results-header">
           <span id="results-mode" class="mode-pill"></span>
-          <p id="results-summary" class="results-summary"></p>
+          <div class="results-meta">
+            <p id="results-summary" class="results-summary"></p>
+          </div>
         </div>
 
         <div id="results-list" class="results-list"></div>
+        <div id="pagination" class="pagination is-hidden">
+          <button id="pagination-prev" type="button" class="ghost-button compact-button">Previous</button>
+          <span id="pagination-status" class="pagination-status"></span>
+          <button id="pagination-next" type="button" class="ghost-button compact-button">Next</button>
+        </div>
       </section>
     </main>
 
@@ -114,6 +128,6 @@
       </div>
     </section>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v=app_version) }}"></script>
   </body>
 </html>

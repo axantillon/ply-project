@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Build a medium-sized JSONL file from IMDb non-commercial title.basics data."""
+"""Build a normalized JSONL movie dataset from IMDb title.basics data."""
+
+from __future__ import annotations
 
 import argparse
 import csv
@@ -7,6 +9,7 @@ import gzip
 import json
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 
 IMDB_BASICS_URL = "https://datasets.imdbws.com/title.basics.tsv.gz"
@@ -19,11 +22,11 @@ def maybe_download(url: str, dst: Path) -> None:
     urllib.request.urlretrieve(url, dst)
 
 
-def nullish(value: str):
+def nullish(value: str) -> Optional[str]:
     return None if value == "\\N" else value
 
 
-def build_jsonl(src_gz: Path, dst_jsonl: Path, limit: int | None) -> int:
+def build_jsonl(src_gz: Path, dst_jsonl: Path, limit: Optional[int]) -> int:
     count = 0
     dst_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
@@ -66,7 +69,8 @@ def main() -> None:
     parser.add_argument(
         "--limit",
         type=int,
-        help="Number of movie records to write. Omit to write every movie in title.basics.tsv.gz.",
+        default=None,
+        help="Number of movie records to write. Omit to build the full dataset.",
     )
     parser.add_argument(
         "--raw",
@@ -77,7 +81,7 @@ def main() -> None:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("data/processed/imdb_movies_medium.jsonl"),
+        default=Path("data/processed/imdb_movies_full.jsonl"),
         help="Output JSONL path",
     )
     parser.add_argument(
@@ -93,7 +97,8 @@ def main() -> None:
         raise FileNotFoundError(f"Raw file not found: {args.raw}. Use --download.")
 
     count = build_jsonl(args.raw, args.out, args.limit)
-    print(f"Wrote {count} records to {args.out}")
+    size_label = "full dataset" if args.limit is None else f"{count} records"
+    print(f"Wrote {size_label} to {args.out}")
 
 
 if __name__ == "__main__":

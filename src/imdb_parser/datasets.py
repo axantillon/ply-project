@@ -7,9 +7,9 @@ from .catalog import MovieCatalog
 
 
 DEFAULT_DATASET_CANDIDATES = (
-    Path("data/processed/imdb_movies_enriched.jsonl"),
+    Path("data/processed/imdb_movies_full.jsonl"),
     Path("data/processed/imdb_movies_medium.jsonl"),
-    Path("data/processed/imdb_movies_small_enriched.jsonl"),
+    Path("data/processed/imdb_movies_small.jsonl"),
 )
 
 
@@ -24,9 +24,3 @@ def resolve_dataset(path: Optional[Path]) -> Path:
 
 def load_catalog(path: Optional[Path]) -> MovieCatalog:
     return MovieCatalog.from_path(resolve_dataset(path), skip_invalid=True)
-
-
-def select_semantic_backend(requested_backend: str) -> str:
-    if requested_backend == "auto":
-        return "tfidf"
-    return requested_backend
