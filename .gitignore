@@ -16,4 +16,6 @@ data/processed/imdb_movies_small.jsonl
 data/processed/imdb_movies_enriched.jsonl
 data/processed/tmdb_overview_cache.json
 data/processed/minilm_embedding_cache.json
+data/processed/minilm_embedding_cache.npz
+demo_combined.mp4
 *.pdf
