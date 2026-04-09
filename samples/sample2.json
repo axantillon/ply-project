@@ -1,0 +1,12 @@
+{
+  "tconst": "tt0109830",
+  "titleType": "movie",
+  "primaryTitle": "Forrest Gump",
+  "originalTitle": "Forrest Gump",
+  "isAdult": false,
+  "startYear": 1994,
+  "endYear": null,
+  "runtimeMinutes": 142,
+  "genres": ["Drama", "Romance"],
+  "synopsis": "A kind-hearted man unexpectedly influences major events in American history while searching for a life with the woman he loves."
+}

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Movie Atlas</title>
+    <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=styles_version) }}">
+  </head>
+  <body>
+    <main id="app-shell" class="app-shell">
+      <section class="composer-stage">
+        <form id="composer-form" class="composer-card">
+          <div class="brand-row">
+            <span class="brand-mark">Movie Atlas</span>
+            <span id="dataset-label" class="dataset-chip" title="{{ dataset }}">{{ dataset }}</span>
+          </div>
+
+          <label class="composer-label" for="semantic-query">Search the movie dataset</label>
+          <textarea
+            id="semantic-query"
+            rows="4"
+            placeholder="Describe a movie or mix metadata, for example: dark sci-fi romance from the 1990s"
+          ></textarea>
+
+          <section id="startup-status" class="startup-status is-hidden" aria-live="polite">
+            <span id="startup-pill" class="mode-pill">Preparing Dataset</span>
+            <p id="startup-message" class="startup-message"></p>
+          </section>
+
+          <section class="mode-strip" aria-label="Search model">
+            <div class="mode-copy">
+              <span class="mode-strip-label">How search works</span>
+              <p class="mode-strip-hint">Write a natural-language prompt. The backend turns it into structured filters and query terms, then searches the IMDb metadata directly.</p>
+            </div>
+          </section>
+
+          <section class="filter-strip" aria-label="Manual filters">
+            <div class="filter-strip-copy">
+              <span class="tool-drawer-label">Manual filters</span>
+            </div>
+            <div id="active-tools" class="active-tools"></div>
+          </section>
+
+          <section id="tool-drawer" class="tool-drawer" aria-label="Manual filters">
+            <div class="tool-grid">
+              <section class="tool-card" data-tool-panel="genre">
+                <label for="find-genre">Genre</label>
+                <input id="find-genre" type="text" placeholder="Sci-Fi, Romance">
+              </section>
+
+              <section class="tool-card" data-tool-panel="years">
+                <label>Years</label>
+                <div class="year-pair">
+                  <input id="find-year-from" type="number" placeholder="From">
+                  <input id="find-year-to" type="number" placeholder="To">
+                </div>
+              </section>
+
+              <section class="tool-card" data-tool-panel="type">
+                <label for="find-title-type">Title Type</label>
+                <select id="find-title-type">
+                  <option value="">Any</option>
+                  <option value="movie">Movie</option>
+                  <option value="short">Short</option>
+                  <option value="tvSeries">TV Series</option>
+                  <option value="tvMovie">TV Movie</option>
+                  <option value="tvSpecial">TV Special</option>
+                  <option value="videoGame">Video Game</option>
+                </select>
+              </section>
+
+              <section class="tool-card" data-tool-panel="title">
+                <label for="find-title">Title Contains</label>
+                <input id="find-title" type="text" placeholder="Valjean">
+              </section>
+            </div>
+          </section>
+
+          <div class="composer-footer">
+            <span class="composer-tip">Enter sends. Shift+Enter adds a line.</span>
+            <div class="composer-actions">
+              <button id="clear-composer" type="button" class="ghost-button">Reset</button>
+              <button type="submit" class="action-button">Search</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section id="results-section" class="results-shell is-hidden" aria-live="polite">
+        <div class="results-header">
+          <span id="results-mode" class="mode-pill"></span>
+          <div class="results-meta">
+            <p id="results-summary" class="results-summary"></p>
+          </div>
+        </div>
+
+        <div id="results-list" class="results-list"></div>
+        <div id="pagination" class="pagination is-hidden">
+          <button id="pagination-prev" type="button" class="ghost-button compact-button">Previous</button>
+          <span id="pagination-status" class="pagination-status"></span>
+          <button id="pagination-next" type="button" class="ghost-button compact-button">Next</button>
+        </div>
+      </section>
+    </main>
+
+    <section id="detail-modal" class="detail-modal is-hidden" aria-hidden="true">
+      <div id="detail-modal-backdrop" class="detail-modal-backdrop"></div>
+      <div
+        class="detail-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detail-modal-title"
+      >
+        <div class="detail-modal-header">
+          <span class="detail-modal-label">Movie Record</span>
+          <button id="close-detail-modal" type="button" class="ghost-button compact-button">Close</button>
+        </div>
+        <div id="detail-card" class="detail-card detail-card-empty">
+          Select a result to inspect the parsed record.
+        </div>
+      </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='app.js', v=app_version) }}"></script>
+  </body>
+</html>

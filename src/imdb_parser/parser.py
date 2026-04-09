@@ -1,16 +1,24 @@
 # -----------------------------------------------------------------------------
-# calc.py
+# parser.py
 #
-# Initial PLY parser for JSON data (movie objects from IMDB-style datasets).
-# ADAPTATION NOTES:
-#   This file started from PLY's calculator example and was rewritten for JSON.
-#   Search for "ADAPTED:" comments to see what changed from the original calc.
+# PLY-based parser for normalized movie JSON objects.
 # -----------------------------------------------------------------------------
 
+from __future__ import annotations
+
 import json
+from pathlib import Path
+from typing import Any
 
 import ply.lex as lex
 import ply.yacc as yacc
+
+from .models import Movie, MovieValidationError
+
+
+class MovieParseError(ValueError):
+    """Raised when the input cannot be parsed as a movie object."""
+
 
 tokens = (
     "STRING",
@@ -20,24 +28,17 @@ tokens = (
     "NULL",
 )
 
-# ADAPTED: calculator literals ['=', '+', '-', '*', '/', '(', ')']
-# became JSON punctuation literals ['{', '}', '[', ']', ':', ','].
-# JSON punctuation literals
 literals = ["{", "}", "[", "]", ":", ","]
-
 t_ignore = " \t\r"
 
 
 def t_STRING(t):
-    # ADAPTED: calculator used NAME token; JSON needs quoted STRING token.
     r'"([^"\\]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*"'
     t.value = json.loads(t.value)
     return t
 
 
 def t_NUMBER(t):
-    # ADAPTED: calculator only parsed integers (\d+).
-    # JSON NUMBER supports sign, decimals, and exponent.
     r"-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?"
     text = t.value
     if "." in text or "e" in text.lower():
@@ -48,21 +49,18 @@ def t_NUMBER(t):
 
 
 def t_TRUE(t):
-    # ADAPTED: JSON keyword literal.
     r"true"
     t.value = True
     return t
 
 
 def t_FALSE(t):
-    # ADAPTED: JSON keyword literal.
     r"false"
     t.value = False
     return t
 
 
 def t_NULL(t):
-    # ADAPTED: JSON keyword literal.
     r"null"
     t.value = None
     return t
@@ -74,15 +72,12 @@ def t_newline(t):
 
 
 def t_error(t):
-    print("Illegal character '%s'" % t.value[0])
-    t.lexer.skip(1)
+    raise MovieParseError(f"Illegal character {t.value[0]!r} at position {t.lexpos}")
 
 
 lexer = lex.lex()
 
 
-# ADAPTED: old start behavior was statement/expression calculator grammar.
-# New start symbol expects a JSON movie object.
 def p_movie(p):
     "movie : object"
     p[0] = p[1]
@@ -105,7 +100,8 @@ def p_members_opt_empty(p):
 
 def p_members_single(p):
     "members : pair"
-    p[0] = dict([p[1]])
+    key, value = p[1]
+    p[0] = {key: value}
 
 
 def p_members_multi(p):
@@ -147,7 +143,6 @@ def p_elements_multi(p):
 
 
 def p_value(p):
-    # ADAPTED: replaces arithmetic expression grammar with JSON value grammar.
     """value : STRING
              | NUMBER
              | object
@@ -160,27 +155,44 @@ def p_value(p):
 
 def p_empty(p):
     "empty :"
-    pass
 
 
 def p_error(p):
-    if p:
-        print("Syntax error at '%s'" % p.value)
-    else:
-        print("Syntax error at EOF")
+    if p is None:
+        raise MovieParseError("Syntax error at EOF")
+    raise MovieParseError(f"Syntax error at token {p.type} with value {p.value!r}")
 
 
-parser = yacc.yacc(start="movie")
+_THIS_DIR = Path(__file__).resolve().parent
+parser = yacc.yacc(start="movie", outputdir=str(_THIS_DIR))
+
+
+def parse_movie_json_raw(text: str) -> dict[str, Any]:
+    result = parser.parse(text, lexer=lexer.clone())
+    if not isinstance(result, dict):
+        raise MovieParseError("Top-level JSON value must be an object")
+    return result
+
+
+def parse_movie_json(text: str) -> Movie:
+    payload = parse_movie_json_raw(text)
+    try:
+        return Movie.from_mapping(payload)
+    except MovieValidationError as exc:
+        raise MovieParseError(str(exc)) from exc
+
 
 if __name__ == "__main__":
-    # ADAPTED: old prompt was "calc >" and parsed arithmetic input.
-    # New prompt parses one JSON object per line and prints Python result.
     while True:
         try:
-            s = input("json-movie > ")
+            line = input("json-movie > ")
         except EOFError:
             break
-        if not s.strip():
+        if not line.strip():
             continue
-        result = parser.parse(s, lexer=lexer)
-        print(result)
+        try:
+            movie = parse_movie_json(line)
+        except MovieParseError as exc:
+            print(f"error: {exc}")
+            continue
+        print(movie)
