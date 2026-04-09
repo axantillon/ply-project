@@ -1,22 +1,42 @@
-# IMDb Movie Parser Project (PLY)
+# Movie Parser Project (PLY)
 
-This project parses normalized movie JSON records with a PLY lexer/parser, stores them as in-memory `Movie` objects, and exposes both structured and natural-language search through a CLI.
+This repository is organized as a submission-ready movie parser project for Programming Assignment 1, Part 2. It implements a JSON-based movie parser in PLY, stores parsed data in memory as Python objects, and provides both CLI and web interfaces for exploring the parsed records.
 
-## Project Layout
+The main submission page is:
 
-- `src/imdb_parser/parser.py`: PLY lexer/parser and parse helpers.
-- `src/imdb_parser/models.py`: `Movie` dataclass and schema validation.
-- `src/imdb_parser/catalog.py`: load JSON and JSONL movie datasets into memory.
-- `src/imdb_parser/query.py`: deterministic movie search.
-- `src/imdb_parser/semantic_search.py`: TF-IDF-based semantic retrieval.
-- `scripts/build_imdb_medium_jsonl.py`: build a normalized JSONL dataset from IMDb `title.basics.tsv.gz`.
-- `scripts/enrich_with_tmdb.py`: enrich the JSONL dataset with TMDb synopses.
-- `scripts/movie_cli.py`: main CLI for validation, parsing, and querying.
-- `scripts/movie_web.py`: one-page web UI for exploring the dataset in a browser.
-- `scripts/validate_jsonl_with_parser.py`: validate many JSONL rows with the parser.
-- `samples/`: complete sample input files for the parser.
+- `PROGRAMMING_ASSIGNMENT_1_PART_2_REPORT.md`
+
+That page is intended to be rendered directly on GitHub. It contains the project walkthrough, CFG, partial canonical collection, and the repository/video links used for submission.
+
+## Repository Structure
+
+The repository is intentionally organized around the parts that matter for evaluation:
+
+- `src/imdb_parser/`: parser, models, catalog, search, and web app code
+- `scripts/`: command-line entry points and dataset utilities
+- `samples/`: valid and invalid example movie inputs
+- `tests/`: parser tests
+- `PROGRAMMING_ASSIGNMENT_1_PART_2_REPORT.md`: the submission report
+
+## Core Files
+
+The main files to review are:
+
+- `src/imdb_parser/parser.py`: PLY lexer and parser rules
+- `src/imdb_parser/models.py`: `Movie` model and semantic validation
+- `src/imdb_parser/catalog.py`: in-memory catalog loading
+- `src/imdb_parser/query.py`: structured query logic
+- `src/imdb_parser/semantic_search.py`: semantic retrieval backends
+- `src/imdb_parser/webapp.py`: Flask web app
+- `scripts/movie_cli.py`: primary CLI entry point
+- `scripts/movie_web.py`: local web launcher
+- `tests/test_parser.py`: parser and validation tests
+
+The repository intentionally avoids putting submission guidance, assignment text, and implementation code at the same level unless those files are directly useful for grading.
 
 ## Setup
+
+Create a virtual environment and install dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -24,9 +44,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Input Schema
+If you use MiniLM search, `sentence-transformers` may download the model on first use.
 
-Each movie file is a JSON object with this normalized shape:
+## Input Format
+
+Each movie input is a JSON object with fields like:
 
 ```json
 {
@@ -43,66 +65,41 @@ Each movie file is a JSON object with this normalized shape:
 }
 ```
 
-## Build Dataset
+The parser accepts the JSON structure, and the model layer enforces movie-specific constraints such as required fields and field types.
 
-```bash
-python3 scripts/build_imdb_medium_jsonl.py --download --limit 15000
-```
+## Quick Start
 
-This writes `data/processed/imdb_movies_medium.jsonl`.
-
-## Enrich With TMDb Synopses
-
-Set a TMDb bearer token and run:
-
-```bash
-export TMDB_API_BEARER_TOKEN=your_token_here
-python3 scripts/movie_cli.py enrich
-```
-
-This writes `data/processed/imdb_movies_enriched.jsonl` and caches fetched synopses at `data/processed/tmdb_overview_cache.json`.
-
-## CLI Usage
-
-The CLI auto-detects a default dataset in this order:
-
-- `data/processed/imdb_movies_small_enriched.jsonl`
-- `data/processed/imdb_movies_enriched.jsonl`
-- `data/processed/imdb_movies_medium.jsonl`
-
-Validate a sample file:
+Validate a valid sample:
 
 ```bash
 python3 scripts/movie_cli.py validate samples/sample1.json
 ```
 
-Parse and print a file:
+Validate an invalid sample:
+
+```bash
+python3 scripts/movie_cli.py validate samples/invalid_sample.json
+```
+
+Parse and display one movie:
 
 ```bash
 python3 scripts/movie_cli.py parse samples/sample1.json
 ```
 
-Run structured search:
+Search the sample dataset:
 
 ```bash
-python3 scripts/movie_cli.py find --genre Sci-Fi --year-from 1990 --year-to 2010
+python3 scripts/movie_cli.py find --dataset samples --genre Sci-Fi
 ```
 
-Show one movie:
+Run the parser tests:
 
 ```bash
-python3 scripts/movie_cli.py show --dataset samples tt0133093
+python3 -m unittest tests.test_parser
 ```
 
-Summarize the active dataset:
-
-```bash
-python3 scripts/movie_cli.py stats
-```
-
-## Web UI
-
-Run the local web app:
+Start the local web app:
 
 ```bash
 python3 scripts/movie_web.py
@@ -110,20 +107,21 @@ python3 scripts/movie_web.py
 
 Then open `http://127.0.0.1:8000`.
 
-The page includes:
+## Datasets
 
-- natural-language search backed by TF-IDF
-- structured filtering
-- a movie detail modal
+The CLI can operate on sample files or on processed JSONL datasets under `data/processed/`. The default dataset selection order is:
 
-Run natural-language search with the local TF-IDF backend:
+1. `data/processed/imdb_movies_full.jsonl`
+2. `data/processed/imdb_movies_medium.jsonl`
+3. `data/processed/imdb_movies_small.jsonl`
 
-```bash
-python3 scripts/movie_cli.py search --dataset samples "dark sci-fi movie about simulated reality"
-```
+You can override this with `--dataset`.
 
-## Validate Dataset
+## Notes For Submission
 
-```bash
-python3 scripts/validate_jsonl_with_parser.py --max-lines 200
-```
+For grading, the most useful path is:
+
+1. Open `PROGRAMMING_ASSIGNMENT_1_PART_2_REPORT.md`.
+2. Follow the repository and video links there.
+3. Review the CFG and the partial canonical collection in that page.
+4. Run the example commands in this README or in the submission report.
